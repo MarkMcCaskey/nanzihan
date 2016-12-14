@@ -40,6 +40,7 @@ data Nanzihan = Nanzihan
   , extension :: Text
   , font      :: Text
   , numCores  :: Int
+  , noiseType :: Text
   } deriving(Show, Eq)
 
 nanzihan :: Parser Nanzihan
@@ -83,6 +84,13 @@ nanzihan = Nanzihan
     <> showDefault
     <> value 1
     <> metavar "NUM-JOBS")
+  <*> (T.pack <$> strOption
+        (long "noise"
+         <> short 'n'
+         <> help "Add noise to the image.  If unspecified no noise will be applied. See `convert -list noise` for types"
+         <> showDefault
+         <> value ""
+         <> metavar "NOISE-TYPE"))
 
 
 getHanzi n
@@ -101,7 +109,8 @@ main' nz = do
       (\job -> mapM (\ch -> background job $ imagemagick (80,80)
                             (font nz)
                             64 ch (outputDir nz)
-                            (extension nz))
+                            (extension nz)
+                            (noiseType nz))
                hanziList)
     return ()
 
@@ -116,8 +125,8 @@ main = do
              <> progDesc "Generate training images of Chinese characters"
              <> header "nanzihan - a Chinese character image generator")
 
-imagemagick :: (Int,Int) -> Text -> Int -> Text -> Text -> Text -> Sh (Text)
-imagemagick (h,w) font fontsize char outdir extension 
+imagemagick :: (Int,Int) -> Text -> Int -> Text -> Text -> Text -> Text -> Sh (Text)
+imagemagick (h,w) font fontsize char outdir extension noiseType
   = escaping False $
     run "convert" (["-size " <> (T.pack (show h)) <> "x" <> (T.pack (show w))
                     , "-depth 8 pattern:GRAY100"
@@ -125,5 +134,6 @@ imagemagick (h,w) font fontsize char outdir extension
                     , "-font " <> font
                     , "-pointsize " <> (T.pack (show fontsize))
                     , "-encoding Unicode"
-                    , "-draw \"text 0,0 '" <> char <> "'\""
-                    , outdir <> "/" <> char <> extension <> ".jpg"])
+                    , "-draw \"text 0,0 '" <> char <> "'\""] ++
+                    (if noiseType == T.empty then [] else ["+noise " <> noiseType]) ++
+                    [outdir <> "/" <> char <> extension <> ".jpg"])
