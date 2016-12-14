@@ -18,6 +18,8 @@ import Shelly
 import Shelly.Background
 import System.IO
 import Development.IncludeFile
+import Control.Lens
+import Data.Char (isSpace)
 
 default (Text)
 
@@ -34,14 +36,17 @@ data Verbosity = Normal | Verbose deriving (Show,Eq)
 [h1,h2,h3,h4,h5,h6,com] = fmap (T.group . E.decodeUtf8) [hsk1u,hsk2u,hsk3u,hsk4u,hsk5u,hsk6u,common]
 
 data Nanzihan = Nanzihan
-  { hskLevel  :: Int
-  , verbose   :: Verbosity
-  , outputDir :: Text
-  , extension :: Text
-  , font      :: Text
-  , numCores  :: Int
-  , noiseType :: Text
+  { _hskLevel  :: Int
+  , _verbose   :: Verbosity
+  , _outputDir :: Text
+  , _extension :: Text
+  , _font      :: Text
+  , _numCores  :: Int
+  , _noiseType :: Text
+  , _generate  :: Bool
   } deriving(Show, Eq)
+
+makeLenses ''Nanzihan
 
 nanzihan :: Parser Nanzihan
 nanzihan = Nanzihan
@@ -91,6 +96,11 @@ nanzihan = Nanzihan
          <> showDefault
          <> value ""
          <> metavar "NOISE-TYPE"))
+  <*> flag False True
+  (   long "generate"
+    <> short 'g'
+    <> help "Generate test data.  Will use a number of fonts and filters.  This will take a while." )
+
 
 
 getHanzi n
@@ -101,16 +111,16 @@ getHanzi n
 
 main' :: Nanzihan -> IO ()
 main' nz = do
-  shelly $ (if (verbose nz) == Verbose then verbosely else id) $ do
-    let hanziList = filter(\a -> a /=T.empty && a/=" ")
-                    (getHanzi (hskLevel nz))
-    mkdir_p (fromText . outputDir $ nz)
-    jobs (if numCores nz > 0 then numCores nz else 1)
+  shelly $ (if nz^.verbose == Verbose then verbosely else id) $ do
+    let hanziList = filter(\a -> not (T.any isSpace a) && a /=T.empty) $
+                    (nz^.hskLevel.to getHanzi)
+    mkdir_p (nz^.outputDir.to fromText)
+    jobs (if nz^.numCores > 0 then nz^.numCores else 1)
       (\job -> mapM (\ch -> background job $ imagemagick (80,80)
-                            (font nz)
-                            64 ch (outputDir nz)
-                            (extension nz)
-                            (noiseType nz))
+                            (nz^.font)
+                            64 ch (nz^.outputDir)
+                            (nz^.extension)
+                            (nz^.noiseType))
                hanziList)
     return ()
 
@@ -118,7 +128,27 @@ main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
   p <- execParser opts
-  main' p
+  if (p^.generate)
+    then sequence_
+         [let v = p & font.~fonts & noiseType.~effects & extension.~("."<>fonts<>effects)
+          in main' v
+         | effects <- ["Gaussian", "Impulse", "Laplacian","Multiplicative","Poisson", "Random", "Uniform", ""]
+         , fonts <-["WenQuanYi-Zen-Hei-Mono"
+                   ,"Noto-Sans-CJK-TC-Black"
+                   ,"Noto-Sans-CJK-SC-Black"
+                   ,"Noto-Sans-CJK-TC-Regular"
+                   ,"Noto-Sans-CJK-SC-Regular"
+                   ,"Noto-Sans-Mono-CJK-SC-Regular"
+                   ,"Noto-Sans-Mono-CJK-TC-Regular"
+                   ,"cwTeXKai"
+                   ,"TW-MOE-Std-Kai"
+                   ,"AR-PL-UKai-CN"
+                   ,"AR-PL-UKai-TW"
+                   ,"cwTeXFangSong"
+                   ,"MOESongUN"]]
+
+    else main' p
+  return ()
   where
     opts = info (helper <*> nanzihan)
            ( fullDesc
