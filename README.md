@@ -23,7 +23,7 @@ Be sure to add `~/.local/bin` to your `PATH`.
 
 ## Autocompletion from shell
 
-For auto-complete of jboi from your shell add `eval "$(nanzihan --bash-completion-script nanzihan)"` to your `.bashrc`.
+For auto-complete of nanzihan from your shell add `eval "$(nanzihan --bash-completion-script nanzihan)"` to your `.bashrc`.
 
 For shell auto-completion from ZSH add the following to your `.zshrc`:
 
